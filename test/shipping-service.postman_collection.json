@@ -1,0 +1,231 @@
+{
+  "info": {
+    "_postman_id": "b6d2f7e0-4a1c-4d2b-9f3a-1c7e5a2b8d10",
+    "name": "Shipping Service",
+    "description": "Royal Mail label PDF parser. Extracts tracking number / recipient / postcode / cost, upserts into Supabase Postgres, and returns CSV or JSON. Set {{baseUrl}} in the environment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "0"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('service is healthy', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json.status).to.eql('healthy');",
+              "  pm.expect(json.service).to.eql('shipping-service');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Liveness check. Returns { status, service, timestamp }."
+      },
+      "response": []
+    },
+    {
+      "name": "Parse Labels -> CSV (single PDF)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('content-type is CSV', function () {",
+              "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');",
+              "});",
+              "pm.test('CSV has expected header row', function () {",
+              "  pm.expect(pm.response.text()).to.include('Full Name,Postal Code,Tracking Number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "A single labels PDF (max 25MB). Field name must be 'file'."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipping/parse-labels-csv",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "shipping", "parse-labels-csv"]
+        },
+        "description": "Uploads one PDF, splits it into per-label chunks, OCR fallback when extraction is weak, persists rows, and returns a CSV download (Full Name, Postal Code, Tracking Number)."
+      },
+      "response": []
+    },
+    {
+      "name": "Parse Labels -> CSV (multiple PDFs merged)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('content-type is CSV', function () {",
+              "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');",
+              "});",
+              "pm.test('CSV has expected header row', function () {",
+              "  pm.expect(pm.response.text()).to.include('Full Name,Postal Code,Tracking Number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "files",
+              "type": "file",
+              "src": [],
+              "description": "First PDF. Field name must be 'files'. Add more rows with the same key 'files' to merge up to 25."
+            },
+            {
+              "key": "files",
+              "type": "file",
+              "src": [],
+              "description": "Second PDF (optional)."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipping/parse-labels-csv-multi",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "shipping", "parse-labels-csv-multi"]
+        },
+        "description": "Merges up to 25 PDFs into one, parses (with OCR fallback), persists rows, and returns a CSV download. Add multiple 'files' rows to upload more than one PDF."
+      },
+      "response": []
+    },
+    {
+      "name": "Parse Labels -> JSON (single PDF)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('response is JSON with success + extracted[]', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json.success).to.eql(true);",
+              "  pm.expect(json.extracted).to.be.an('array');",
+              "  pm.expect(json).to.have.property('count');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "A single labels PDF. Field name must be 'file'."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipping/parse-labels",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "shipping", "parse-labels"]
+        },
+        "description": "Uploads one PDF and returns { success, count, extracted[], saved[] } as JSON (no OCR fallback on this route)."
+      },
+      "response": []
+    },
+    {
+      "name": "Parse Single Label -> JSON",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('response is JSON with success + extracted', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json.success).to.eql(true);",
+              "  pm.expect(json.extracted).to.be.an('object');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [],
+              "description": "A single-label PDF. Field name must be 'file'."
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipping/parse-label",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "shipping", "parse-label"]
+        },
+        "description": "Parses only the first label found in the PDF and returns { success, extracted, saved } as JSON."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3014",
+      "type": "string"
+    }
+  ]
+}
