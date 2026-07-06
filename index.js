@@ -493,6 +493,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', service: 'shipping-service', timestamp: new Date() });
 });
 
+app.get('/api/shipping/health', (_req, res) => {
+  res.json({ status: 'healthy', service: 'shipping-service', timestamp: new Date() });
+});
+
 app.post('/api/shipping/parse-labels-csv', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
