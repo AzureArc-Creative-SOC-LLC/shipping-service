@@ -16,6 +16,9 @@ const dotenvCandidates = [
   process.env.DOTENV_PATH,
   // Local .env sitting next to this file (shipping-service/.env)
   path.resolve(__dirname, '.env'),
+  // Shared env one level up: /var/www/.env when service is /var/www/shipping-service
+  path.resolve(__dirname, '..', '.env'),
+  path.resolve(__dirname, '..', '..', '.env'),
   // Shared backend env: /var/www/backend/.env when service is /var/www/backend/server/shipping-service/src
   path.resolve(__dirname, '..', '..', '..', '.env'),
 ].filter(Boolean);
