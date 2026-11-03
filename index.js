@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const { Pool } = require('pg');
+const { createDomainMiddleware } = require('./domainMiddleware');
 const pdfParse = require('pdf-parse');
 const { PDFDocument } = require('pdf-lib');
 const { spawn } = require('child_process');
@@ -172,6 +173,13 @@ const pool = new Pool({
   max: 10,
   ssl: {
     rejectUnauthorized: false,
+  },
+});
+
+const domainMiddleware = createDomainMiddleware({
+  lookupDomain: async (name) => {
+    const { rows } = await pool.query('SELECT id, status FROM domains WHERE domain_name = $1', [name]);
+    return rows[0] || null;
   },
 });
 
@@ -387,13 +395,13 @@ function splitLabelsFromText(text) {
   return chunks.length ? chunks : [t];
 }
 
-async function upsertShippingLabel(fields, rawText, sourceFilename) {
+async function upsertShippingLabel(fields, rawText, sourceFilename, domainId) {
   await pool.query(
     `INSERT INTO shipping_labels (
       tracking_number, customer_ref, recipient_name, address_text, postcode,
       service_name, postage_cost, postage_currency, label_date,
-      source_filename, raw_text
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      source_filename, raw_text, domain_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     ON CONFLICT (tracking_number) DO UPDATE SET
       customer_ref = EXCLUDED.customer_ref,
       recipient_name = EXCLUDED.recipient_name,
@@ -417,6 +425,7 @@ async function upsertShippingLabel(fields, rawText, sourceFilename) {
       fields.label_date,
       sourceFilename || null,
       rawText || null,
+      domainId ?? null,
     ]
   );
 
@@ -484,6 +493,7 @@ const corsOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((s) => s.trim()).filter(Boolean), credentials: true }));
 app.use(helmet());
 app.use(morgan('dev'));
+app.use(domainMiddleware);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -577,7 +587,7 @@ app.post('/api/shipping/parse-labels-csv', upload.single('file'), async (req, re
     for (const chunk of chunks) {
       const fields = extractFieldsFromText(chunk);
       extracted.push(fields);
-      const row = await upsertShippingLabel(fields, chunk, pdfFileName);
+      const row = await upsertShippingLabel(fields, chunk, pdfFileName, req.domainId);
       saved.push(row);
     }
 
@@ -673,7 +683,7 @@ app.post('/api/shipping/parse-labels-csv-multi', upload.array('files', 25), asyn
     for (const chunk of chunks) {
       const fields = extractFieldsFromText(chunk);
       extracted.push(fields);
-      const row = await upsertShippingLabel(fields, chunk, pdfFileName);
+      const row = await upsertShippingLabel(fields, chunk, pdfFileName, req.domainId);
       if (row) saved.push(row);
     }
 
@@ -715,7 +725,7 @@ app.post('/api/shipping/parse-labels', upload.single('file'), async (req, res) =
     for (const chunk of chunks) {
       const fields = extractFieldsFromText(chunk);
       extracted.push(fields);
-      const row = await upsertShippingLabel(fields, chunk, file.originalname || null);
+      const row = await upsertShippingLabel(fields, chunk, file.originalname || null, req.domainId);
       saved.push(row);
     }
 
@@ -741,7 +751,7 @@ app.post('/api/shipping/parse-label', upload.single('file'), async (req, res) =>
 
     const chunk = splitLabelsFromText(text)[0] || '';
     const fields = extractFieldsFromText(chunk);
-    const row = await upsertShippingLabel(fields, chunk, file.originalname || null);
+    const row = await upsertShippingLabel(fields, chunk, file.originalname || null, req.domainId);
 
     return res.json({ success: true, extracted: fields, saved: row });
   } catch (e) {
